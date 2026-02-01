@@ -952,7 +952,7 @@ class EsparcraftLauncher(ctk.CTk):
             counter_label.configure(text=f"{len(players)} online")
 
     def _sidebar_create_player_card(self, parent, server: ServerRuntime, info: dict):
-        """Crea una tarjeta compacta para el panel lateral (nombre + rol + Kick/Ban/DeOP)."""
+        """Crea una tarjeta para el panel lateral (nombre + rol + Kick/Ban/DeOP)."""
         name = info["name"]
         uuid = info["uuid"]
         role = info["role"]
@@ -961,15 +961,15 @@ class EsparcraftLauncher(ctk.CTk):
         row.grid_columnconfigure(0, weight=1)
 
         left = ctk.CTkFrame(row, fg_color="transparent")
-        left.grid(row=0, column=0, sticky="w", padx=3, pady=1)
+        left.grid(row=0, column=0, sticky="w", padx=3, pady=2)
 
         right = ctk.CTkFrame(row, fg_color="transparent")
-        right.grid(row=0, column=1, sticky="e", padx=3, pady=1)
+        right.grid(row=0, column=1, sticky="e", padx=3, pady=2)
 
-        # nombre
+        # ---------- nombre ----------
         name_label = ctk.CTkLabel(
             left, text=name,
-            font=ctk.CTkFont(size=10, weight="bold")
+            font=ctk.CTkFont(size=11, weight="bold")
         )
         name_label.pack(anchor="w")
 
@@ -984,7 +984,7 @@ class EsparcraftLauncher(ctk.CTk):
         name_label.bind("<Enter>", on_enter)
         name_label.bind("<Leave>", on_leave)
 
-        # badge rol
+        # ---------- badge rol ----------
         if role == "OP":
             fg = "#f59e0b"
         elif role == "BANEADO":
@@ -999,7 +999,7 @@ class EsparcraftLauncher(ctk.CTk):
             fg_color=fg,
             corner_radius=6,
             padx=4, pady=1,
-            font=ctk.CTkFont(size=8, weight="bold")
+            font=ctk.CTkFont(size=9, weight="bold")
         )
         role_label.pack(anchor="w", pady=(1, 0))
 
@@ -1012,25 +1012,28 @@ class EsparcraftLauncher(ctk.CTk):
             except Exception:
                 pass
 
-        # botones más claros y pequeños
-        btn_font = ctk.CTkFont(size=9)
-        base_style = dict(width=26, height=18,
-                          fg_color="#6b7280",
-                          hover_color="#9ca3af",
-                          text_color="white",
-                          font=btn_font)
+        # ---------- botones grandes y claros ----------
+        btn_font = ctk.CTkFont(size=10)
+        base_style = dict(
+            width=60,
+            height=24,
+            fg_color="#374151",
+            hover_color="#4b5563",
+            text_color="white",
+            font=btn_font
+        )
 
         # Kick
         kick_btn = ctk.CTkButton(
-            right, text="K",
+            right, text="Kick",
             command=lambda n=name: send_cmd(f"kick {n}"),
             **base_style
         )
-        kick_btn.pack(side="left", padx=(0, 2))
+        kick_btn.pack(side="left", padx=(0, 3))
 
         # Ban / Unban
         if role == "BANEADO":
-            ban_text = "Unb"
+            ban_text = "Unban"
             ban_cmd = lambda n=name: send_cmd(f"pardon {n}")
         else:
             ban_text = "Ban"
@@ -1039,16 +1042,18 @@ class EsparcraftLauncher(ctk.CTk):
         ban_btn = ctk.CTkButton(
             right, text=ban_text,
             command=ban_cmd,
-            width=30, height=18,
-            fg_color="#b91c1c", hover_color="#ef4444",
+            width=64,
+            height=24,
+            fg_color="#b91c1c",
+            hover_color="#ef4444",
             text_color="white",
             font=btn_font
         )
-        ban_btn.pack(side="left", padx=(0, 2))
+        ban_btn.pack(side="left", padx=(0, 3))
 
         # DeOP
         deop_btn = ctk.CTkButton(
-            right, text="-OP",
+            right, text="DeOP",
             command=lambda n=name: send_cmd(f"deop {n}"),
             **base_style
         )
@@ -1118,7 +1123,7 @@ class EsparcraftLauncher(ctk.CTk):
         # Ban / Unban
         if role == "BANEADO":
             row._ban_btn.configure(
-                text="Unb",
+                text="Unban",
                 command=lambda n=name: send_cmd(f"pardon {n}")
             )
             row._deop_btn.configure(state="disabled")
@@ -1194,22 +1199,12 @@ class EsparcraftLauncher(ctk.CTk):
             justify="center"
         ).pack(expand=True)
 
-
-
         # ================= STATUS =================
-
-
-
-        status_color = "#22c55e" if server.status == "online" else "#ef4444"
-        status_text = "ONLINE" if server.status == "online" else "OFFLINE"
-
         status_frame = ctk.CTkFrame(card, fg_color="transparent")
-        status_frame.pack(anchor="w",padx=20, pady=(0, 5))
-
-
+        status_frame.pack(anchor="w", padx=20, pady=(0, 5))
 
         perf_frame = ctk.CTkFrame(card, fg_color="transparent")
-        perf_frame.pack(anchor="w",padx=20, pady=(0, 10))
+        perf_frame.pack(anchor="w", padx=20, pady=(0, 10))
 
         cpu_label = ctk.CTkLabel(perf_frame, text="CPU: -- %")
         cpu_label.pack(side="left", padx=(0, 15))
@@ -1219,7 +1214,6 @@ class EsparcraftLauncher(ctk.CTk):
 
         def update_performance():
             update_server_performance(server)
-
             if server.cached_cpu is not None:
                 cpu_label.configure(text=f"CPU: {server.cached_cpu:.1f} %")
                 ram_label.configure(text=f"RAM: {server.cached_ram:.0f} MB")
@@ -1227,10 +1221,7 @@ class EsparcraftLauncher(ctk.CTk):
                 cpu_label.configure(text="CPU: -- %")
                 ram_label.configure(text="RAM: -- MB")
 
-
-
-
-
+        # misma lógica que en _update_console
         def get_status():
             if not server.running:
                 return "OFFLINE", "#ef4444"
@@ -1244,19 +1235,20 @@ class EsparcraftLauncher(ctk.CTk):
 
         text, color = get_status()
 
-        ctk.CTkLabel(
+        status_dot = ctk.CTkLabel(
             status_frame,
             text="●",
             text_color=color,
             font=ctk.CTkFont(size=14)
-        ).pack(side="left", padx=(0, 6))
+        )
+        status_dot.pack(side="left", padx=(0, 6))
 
-        ctk.CTkLabel(
+        status_label = ctk.CTkLabel(
             status_frame,
             text=text,
             text_color=color
-        ).pack(side="left")
-
+        )
+        status_label.pack(side="left")
 
         # ================= JAVA INFO =================
         if JAVA_MAJOR and JAVA_MAJOR >= 17:
@@ -1294,25 +1286,15 @@ class EsparcraftLauncher(ctk.CTk):
 
         main_btn_color = "#2563eb"
 
-        # Botón principal (arriba): Iniciar / Detener
-        if server.status == "offline":
-            ctk.CTkButton(
-                actions,
-                text="▶ Iniciar servidor",
-                fg_color=main_btn_color,
-                command=lambda s=server: self.start_server(s)
-            ).pack(fill="x", pady=6)
-        else:
-            ctk.CTkButton(
-                actions,
-                text="⏹ Detener servidor",
-                fg_color="#dc2626",
-                hover_color="#b91c1c",
-                # usamos stop_server_clean, que ya usas en la consola y marca flags
-                command=lambda s=server: self.stop_server_clean(s)
-            ).pack(fill="x", pady=6)
+        # Botón principal (se actualiza dinámicamente)
+        main_button = ctk.CTkButton(
+            actions,
+            text="",
+            fg_color=main_btn_color
+        )
+        main_button.pack(fill="x", pady=6)
 
-        # Ahora Jugadores va debajo del botón principal
+        # Botones secundarios
         ctk.CTkButton(
             actions,
             text="👥 Jugadores",
@@ -1340,12 +1322,55 @@ class EsparcraftLauncher(ctk.CTk):
             fg_color="#374151",
             command=lambda s=server: self.open_server_modal(s)
         ).pack(fill="x", pady=(4, 10))
-        
-        def loop_perf():
-            update_performance()
-            card.after(1000, loop_perf)
 
-        loop_perf()
+        # ---------- ACTUALIZAR ESTADO + BOTÓN PRINCIPAL ----------
+        def update_status_ui():
+            text, color = get_status()
+            status_dot.configure(text_color=color)
+            status_label.configure(text=text, text_color=color)
+
+            # Botón principal según estado real del servidor
+            if not server.running:
+                # servidor parado -> botón de iniciar
+                main_button.configure(
+                    text="▶ Iniciar servidor",
+                    fg_color=main_btn_color,
+                    hover_color="#1d4ed8",
+                    state="normal",
+                    command=lambda s=server: self.start_server(s)
+                )
+            else:
+                # servidor en marcha -> botón de detener
+                if server.stopping:
+                    # ya se está deteniendo -> deshabilitar para evitar spam
+                    main_button.configure(
+                        text="⏹ Detener servidor",
+                        fg_color="#dc2626",
+                        hover_color="#b91c1c",
+                        state="disabled",
+                        command=lambda: None
+                    )
+                else:
+                    main_button.configure(
+                        text="⏹ Detener servidor",
+                        fg_color="#dc2626",
+                        hover_color="#b91c1c",
+                        state="normal",
+                        command=lambda s=server: self.stop_server_clean(s)
+                    )
+
+        # ---------- LOOP DE REFRESCO DE LA TARJETA ----------
+        def tick():
+            # si la tarjeta ha sido destruida, paramos
+            if not card.winfo_exists():
+                return
+            update_performance()
+            update_status_ui()
+            card.after(1000, tick)
+
+        # arranque del loop
+        update_status_ui()
+        tick()
 
 
     # ===================== SERVER =====================
@@ -1576,6 +1601,7 @@ class EsparcraftLauncher(ctk.CTk):
             self.console_widget.configure(state="normal")
             self.console_widget.delete("1.0", "end")
             self.console_widget.configure(state="disabled")
+            self._console_last_index = 0  # ← ESTO ES LO CLAVE
 
         ctk.CTkButton(
             left,
@@ -2468,13 +2494,13 @@ class EsparcraftLauncher(ctk.CTk):
     def open_server_modal(self, server: Optional[ServerRuntime] = None):
         modal = ctk.CTkToplevel(self)
         modal.title("Configurar Servidor" if server else "Nuevo Servidor")
-        modal.geometry("520x600")
+        modal.geometry("520x640")
         modal.grab_set()
 
         # centrar modal
         modal.update_idletasks()
         x = self.winfo_x() + (self.winfo_width() // 2) - 260
-        y = self.winfo_y() + (self.winfo_height() // 2) - 300
+        y = self.winfo_y() + (self.winfo_height() // 2) - 320
         modal.geometry(f"+{x}+{y}")
 
         frame = ctk.CTkFrame(modal)
@@ -2484,27 +2510,230 @@ class EsparcraftLauncher(ctk.CTk):
             frame,
             text="Configuración del Servidor",
             font=ctk.CTkFont(size=20, weight="bold")
-        ).pack(pady=(0, 20))
+        ).pack(pady=(0, 12))
+
+        # ---------- TABS PRINCIPALES ----------
+        tabview = ctk.CTkTabview(frame)
+        tabview.pack(fill="both", expand=True)
+
+        tab_config = tabview.add("Configuración")
+        tab_props = tabview.add("server.properties")
 
         cfg = server.config if server else None
 
-        # ---------- NOMBRE ----------
-        ctk.CTkLabel(frame, text="Nombre").pack(anchor="w")
-        name = ctk.CTkEntry(frame)
-        name.pack(fill="x", pady=5)
-        name.insert(0, cfg.name if cfg else "")
+        # =====================================================
+        #            PESTAÑA 1: CONFIGURACIÓN BÁSICA
+        # =====================================================
 
-        # ---------- RUTA ----------
-        ctk.CTkLabel(frame, text="Ruta del servidor").pack(anchor="w")
+        # Nombre
+        ctk.CTkLabel(tab_config, text="Nombre").pack(anchor="w")
+        name = ctk.CTkEntry(tab_config)
+        name.pack(fill="x", pady=5)
+        if cfg:
+            name.insert(0, cfg.name)
+
+        # Ruta del servidor
+        ctk.CTkLabel(tab_config, text="Ruta del servidor").pack(anchor="w")
 
         path_var = ctk.StringVar(value=cfg.path if cfg else "")
 
-        path_row = ctk.CTkFrame(frame)
-        path_row.pack(fill="x", pady=(5, 15))
+        path_row = ctk.CTkFrame(tab_config)
+        path_row.pack(fill="x", pady=(5, 10))
 
         path_entry = ctk.CTkEntry(path_row, textvariable=path_var)
         path_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
 
+        # Jar
+        ctk.CTkLabel(tab_config, text="Archivo .jar").pack(anchor="w")
+        jar_var = ctk.StringVar(value=cfg.jar if cfg else "server.jar")
+
+        jar_menu = ctk.CTkOptionMenu(
+            tab_config,
+            variable=jar_var,
+            values=[cfg.jar] if cfg and cfg.jar else ["server.jar"]
+        )
+        jar_menu.pack(fill="x", pady=5)
+
+        # RAM mínima
+        ram_min_val = ctk.IntVar(value=cfg.ram_min if cfg else 2)
+        ram_min_label = ctk.CTkLabel(tab_config, text=f"RAM mínima: {ram_min_val.get()} GB")
+        ram_min_label.pack(anchor="w")
+
+        def update_ram_min(v):
+            ram_min_val.set(int(v))
+            ram_min_label.configure(text=f"RAM mínima: {int(v)} GB")
+
+        ram_min = ctk.CTkSlider(tab_config, from_=1, to=32, number_of_steps=31, command=update_ram_min)
+        ram_min.set(ram_min_val.get())
+        ram_min.pack(fill="x")
+
+        # RAM máxima
+        ram_max_val = ctk.IntVar(value=cfg.ram_max if cfg else 4)
+        ram_max_label = ctk.CTkLabel(tab_config, text=f"RAM máxima: {ram_max_val.get()} GB")
+        ram_max_label.pack(anchor="w", pady=(10, 0))
+
+        def update_ram_max(v):
+            ram_max_val.set(int(v))
+            ram_max_label.configure(text=f"RAM máxima: {int(v)} GB")
+
+        ram_max = ctk.CTkSlider(tab_config, from_=1, to=32, number_of_steps=31, command=update_ram_max)
+        ram_max.set(ram_max_val.get())
+        ram_max.pack(fill="x")
+
+        # Auto restart
+        auto_restart_var = ctk.BooleanVar(value=cfg.auto_restart if cfg else False)
+        ctk.CTkCheckBox(
+            tab_config,
+            text="Reinicio automático",
+            variable=auto_restart_var
+        ).pack(anchor="w", pady=15)
+
+        # =====================================================
+        #    ESTADO PARA server.properties Y VARIABLES DE UI
+        # =====================================================
+
+        # Lista que preserva el orden original del archivo (línea por línea)
+        # Cada elemento es un dict: {"type": "comment"|"blank"|"property", "content": str, "key": str|None, "value": str|None}
+        server_props_lines: list[dict] = []
+        
+        # Diccionario para acceso rápido a propiedades
+        server_props_dict: dict[str, str] = {}
+
+        # Orden recomendado para las claves "conocidas" (UI bonita)
+        known_order = [
+            "motd",
+            "level-name",
+            "server-ip",
+            "server-port",
+            "max-players",
+            "online-mode",
+            "white-list",
+            "hardcore",
+            "pvp",
+            "allow-flight",
+            "gamemode",
+            "difficulty",
+            "view-distance",
+            "simulation-distance",
+            "spawn-protection",
+        ]
+        known_keys = set(known_order)
+
+        # variables para campos de server.properties
+        motd_var                = ctk.StringVar(value="Un servidor de Minecraft")
+        server_port_var         = ctk.StringVar(value="25565")
+        server_ip_var           = ctk.StringVar(value="")
+        max_players_var         = ctk.StringVar(value="20")
+        level_name_var          = ctk.StringVar(value="world")
+        spawn_protection_var    = ctk.StringVar(value="16")
+        view_distance_var       = ctk.StringVar(value="10")
+        simulation_distance_var = ctk.StringVar(value="10")
+
+        online_mode_var  = ctk.BooleanVar(value=True)
+        whitelist_var    = ctk.BooleanVar(value=False)
+        hardcore_var     = ctk.BooleanVar(value=False)
+        pvp_var          = ctk.BooleanVar(value=True)
+        allow_flight_var = ctk.BooleanVar(value=False)
+
+        difficulty_var = ctk.StringVar(value="easy")
+        gamemode_var   = ctk.StringVar(value="survival")
+
+        # estado de la pestaña server.properties (lazy load)
+        props_built = False
+        advanced_vars: dict[str, ctk.StringVar] = {}
+        rebuild_advanced_ui_ref = None
+
+        def _bool_from_props(key: str, default: bool) -> bool:
+            v = server_props_dict.get(key, "true" if default else "false")
+            return str(v).strip().lower() == "true"
+
+        def load_server_properties():
+            """Lee server.properties preservando EXACTAMENTE el formato original."""
+            nonlocal server_props_lines, server_props_dict
+
+            server_props_lines = []
+            server_props_dict = {}
+
+            path = (path_var.get() or "").strip()
+            if not path or not os.path.isdir(path):
+                return
+
+            props_file = os.path.join(path, "server.properties")
+            if not os.path.exists(props_file):
+                return
+
+            try:
+                with open(props_file, "r", encoding="utf-8", errors="ignore") as f:
+                    for raw_line in f.readlines():
+                        # Preservar la línea EXACTAMENTE como está (con \n)
+                        line = raw_line.rstrip("\n\r")
+                        stripped = line.strip()
+
+                        # Línea en blanco
+                        if not stripped:
+                            server_props_lines.append({
+                                "type": "blank",
+                                "content": line
+                            })
+                            continue
+
+                        # Comentario
+                        if stripped.startswith("#"):
+                            server_props_lines.append({
+                                "type": "comment",
+                                "content": line
+                            })
+                            continue
+
+                        # Propiedad (clave=valor)
+                        if "=" in line:
+                            key, val = line.split("=", 1)
+                            key = key.strip()
+                            
+                            if key:
+                                server_props_lines.append({
+                                    "type": "property",
+                                    "content": line,
+                                    "key": key,
+                                    "value": val
+                                })
+                                server_props_dict[key] = val
+                            else:
+                                # Línea rara sin clave válida
+                                server_props_lines.append({
+                                    "type": "comment",
+                                    "content": line
+                                })
+                        else:
+                            # Línea que no es comentario ni tiene =
+                            server_props_lines.append({
+                                "type": "comment",
+                                "content": line
+                            })
+
+            except Exception:
+                return
+
+            # rellenar variables básicas
+            motd_var.set(server_props_dict.get("motd", motd_var.get()))
+            server_port_var.set(server_props_dict.get("server-port", server_port_var.get()))
+            server_ip_var.set(server_props_dict.get("server-ip", server_ip_var.get()))
+            max_players_var.set(server_props_dict.get("max-players", max_players_var.get()))
+            level_name_var.set(server_props_dict.get("level-name", level_name_var.get()))
+            spawn_protection_var.set(server_props_dict.get("spawn-protection", spawn_protection_var.get()))
+            view_distance_var.set(server_props_dict.get("view-distance", view_distance_var.get()))
+            simulation_distance_var.set(server_props_dict.get("simulation-distance", simulation_distance_var.get()))
+
+            online_mode_var.set(_bool_from_props("online-mode", True))
+            whitelist_var.set(_bool_from_props("white-list", False))
+            hardcore_var.set(_bool_from_props("hardcore", False))
+            pvp_var.set(_bool_from_props("pvp", True))
+            allow_flight_var.set(_bool_from_props("allow-flight", False))
+
+            difficulty_var.set(server_props_dict.get("difficulty", difficulty_var.get()))
+            gamemode_var.set(server_props_dict.get("gamemode", gamemode_var.get()))
+
+        # ---------- botón para elegir carpeta ----------
         def browse_folder():
             folder = filedialog.askdirectory(parent=modal)
             if not folder:
@@ -2517,6 +2746,11 @@ class EsparcraftLauncher(ctk.CTk):
                 jar_menu.configure(values=jars)
                 jar_var.set(jars[0])
 
+            if props_built:
+                load_server_properties()
+                if rebuild_advanced_ui_ref is not None:
+                    rebuild_advanced_ui_ref()
+
         ctk.CTkButton(
             path_row,
             text="📁",
@@ -2524,52 +2758,208 @@ class EsparcraftLauncher(ctk.CTk):
             command=browse_folder
         ).pack(side="right")
 
+        # =====================================================
+        #        CONSTRUCCIÓN PEREZOSA DE server.properties
+        # =====================================================
 
-        # ---------- JAR ----------
-        ctk.CTkLabel(frame, text="Archivo .jar").pack(anchor="w")
-        jar_var = ctk.StringVar(value=cfg.jar if cfg else "server.jar")
+        def build_props_tab():
+            """Construye la pestaña server.properties (Básico + Avanzado) solo una vez."""
+            nonlocal props_built, advanced_vars, rebuild_advanced_ui_ref
+            if props_built:
+                return
 
-        jar_menu = ctk.CTkOptionMenu(
-            frame,
-            variable=jar_var,
-            values=[cfg.jar] if cfg and cfg.jar else ["server.jar"]
-        )
-        jar_menu.pack(fill="x", pady=5)
+            load_server_properties()
 
-        # ---------- RAM MIN ----------
-        ram_min_val = ctk.IntVar(value=cfg.ram_min if cfg else 2)
-        ram_min_label = ctk.CTkLabel(frame, text=f"RAM mínima: {ram_min_val.get()} GB")
-        ram_min_label.pack(anchor="w")
+            # ----- TabView interno: Básico / Avanzado -----
+            props_tabview = ctk.CTkTabview(tab_props)
+            props_tabview.pack(fill="both", expand=True)
 
-        def update_ram_min(v):
-            ram_min_val.set(int(v))
-            ram_min_label.configure(text=f"RAM mínima: {int(v)} GB")
+            tab_basic = props_tabview.add("Básico")
+            tab_advanced = props_tabview.add("Avanzado")
 
-        ram_min = ctk.CTkSlider(frame, from_=1, to=32, number_of_steps=31, command=update_ram_min)
-        ram_min.set(ram_min_val.get())
-        ram_min.pack(fill="x")
+            # ---------- SUB-TAB BÁSICO ----------
+            props_header = ctk.CTkFrame(tab_basic, fg_color="transparent")
+            props_header.pack(fill="x", pady=(0, 6))
 
-        # ---------- RAM MAX ----------
-        ram_max_val = ctk.IntVar(value=cfg.ram_max if cfg else 4)
-        ram_max_label = ctk.CTkLabel(frame, text=f"RAM máxima: {ram_max_val.get()} GB")
-        ram_max_label.pack(anchor="w", pady=(10, 0))
+            ctk.CTkLabel(
+                props_header,
+                text="Ajustes de server.properties",
+                font=ctk.CTkFont(size=14, weight="bold")
+            ).pack(side="left", padx=(0, 8))
 
-        def update_ram_max(v):
-            ram_max_val.set(int(v))
-            ram_max_label.configure(text=f"RAM máxima: {int(v)} GB")
+            ctk.CTkLabel(
+                props_header,
+                textvariable=path_var,
+                text_color="#9ca3af"
+            ).pack(side="left", fill="x", expand=True)
 
-        ram_max = ctk.CTkSlider(frame, from_=1, to=32, number_of_steps=31, command=update_ram_max)
-        ram_max.set(ram_max_val.get())
-        ram_max.pack(fill="x")
+            props_body = ctk.CTkScrollableFrame(tab_basic, corner_radius=12)
+            props_body.pack(fill="both", expand=True, pady=(0, 5))
 
-        auto_restart_var = ctk.BooleanVar(value=cfg.auto_restart if cfg else False)
-        ctk.CTkCheckBox(
-            frame,
-            text="Reinicio automático",
-            variable=auto_restart_var
-        ).pack(anchor="w", pady=15)
+            def section_label(text: str):
+                ctk.CTkLabel(
+                    props_body,
+                    text=text,
+                    font=ctk.CTkFont(size=13, weight="bold")
+                ).pack(anchor="w", pady=(8, 2), padx=4)
+
+            def row_label_entry(label_text: str, var: ctk.StringVar, placeholder: str = ""):
+                row = ctk.CTkFrame(props_body, fg_color="transparent")
+                row.pack(fill="x", pady=2)
+                ctk.CTkLabel(row, text=label_text).pack(side="left", padx=(4, 8))
+                entry = ctk.CTkEntry(row, textvariable=var, placeholder_text=placeholder)
+                entry.pack(side="right", fill="x", expand=True, padx=(0, 4))
+                return entry
+
+            def row_checkbox(text: str, var: ctk.BooleanVar):
+                ctk.CTkCheckBox(props_body, text=text, variable=var).pack(anchor="w", pady=2, padx=4)
+
+            def row_option(label_text: str, var: ctk.StringVar, values: list[str]):
+                row = ctk.CTkFrame(props_body, fg_color="transparent")
+                row.pack(fill="x", pady=2)
+                ctk.CTkLabel(row, text=label_text).pack(side="left", padx=(4, 8))
+                opt = ctk.CTkOptionMenu(row, variable=var, values=values)
+                opt.pack(side="right", padx=(0, 4))
+                return opt
+
+            # ----- Sección GENERAL -----
+            section_label("General")
+            row_label_entry("MOTD (nombre público)", motd_var, "Un servidor de Minecraft")
+            row_label_entry("Nombre del mundo (level-name)", level_name_var, "world")
+            row_label_entry("IP del servidor (vacío = todas)", server_ip_var, "")
+            row_label_entry("Puerto (server-port)", server_port_var, "25565")
+
+            # ----- Sección JUGADORES -----
+            section_label("Jugadores")
+            row_label_entry("Máx. jugadores (max-players)", max_players_var, "20")
+            row_checkbox("Modo online (online-mode)", online_mode_var)
+            row_checkbox("Lista blanca (white-list)", whitelist_var)
+            row_checkbox("Hardcore", hardcore_var)
+            row_label_entry("Protección de spawn (bloques)", spawn_protection_var, "16")
+
+            # ----- Sección JUEGO -----
+            section_label("Juego")
+            row_option("Gamemode por defecto", gamemode_var,
+                    ["survival", "creative", "adventure", "spectator"])
+            row_option("Dificultad", difficulty_var,
+                    ["peaceful", "easy", "normal", "hard"])
+            row_checkbox("PvP habilitado (pvp)", pvp_var)
+            row_checkbox("Permitir vuelo (allow-flight)", allow_flight_var)
+
+            # ----- Sección RENDIMIENTO -----
+            section_label("Rendimiento")
+            row_label_entry("Distancia de visión (view-distance)", view_distance_var, "10")
+            row_label_entry("Distancia de simulación (simulation-distance)", simulation_distance_var, "10")
+
+            ctk.CTkLabel(
+                props_body,
+                text="El formato original del archivo se preservará exactamente.",
+                text_color="#9ca3af",
+                wraplength=460,
+                justify="left"
+            ).pack(anchor="w", pady=(8, 4), padx=4)
+
+            # botón recargar
+            def reload_props():
+                load_server_properties()
+                if rebuild_advanced_ui_ref is not None:
+                    rebuild_advanced_ui_ref()
+
+            ctk.CTkButton(
+                props_header,
+                text="⟳ Recargar",
+                width=90,
+                fg_color="#374151",
+                command=reload_props
+            ).pack(side="right")
+
+            # ---------- SUB-TAB AVANZADO ----------
+            adv_header = ctk.CTkFrame(tab_advanced, fg_color="transparent")
+            adv_header.pack(fill="x", pady=(0, 6))
+
+            ctk.CTkLabel(
+                adv_header,
+                text="Propiedades avanzadas",
+                font=ctk.CTkFont(size=14, weight="bold")
+            ).pack(anchor="w", padx=4)
+
+            adv_body = ctk.CTkScrollableFrame(tab_advanced, corner_radius=12)
+            adv_body.pack(fill="both", expand=True, pady=(0, 5))
+
+            advanced_vars = {}
+
+            def rebuild_advanced_ui():
+                """Reconstruye la lista de propiedades extra."""
+                for w in adv_body.winfo_children():
+                    w.destroy()
+                advanced_vars.clear()
+
+                if not server_props_dict:
+                    ctk.CTkLabel(
+                        adv_body,
+                        text="Aún no se ha cargado server.properties.\n"
+                            "Selecciona una ruta válida y pulsa 'Recargar'.",
+                        text_color="#9ca3af",
+                        justify="left"
+                    ).pack(anchor="w", padx=8, pady=8)
+                    return
+
+                other_keys = [k for k in server_props_dict.keys() if k not in known_keys]
+                if not other_keys:
+                    ctk.CTkLabel(
+                        adv_body,
+                        text="No hay propiedades adicionales.",
+                        text_color="#9ca3af",
+                        justify="left"
+                    ).pack(anchor="w", padx=8, pady=8)
+                    return
+
+                other_keys.sort()
+
+                ctk.CTkLabel(
+                    adv_body,
+                    text="Aquí puedes editar el resto de claves de server.properties.\n"
+                        "Ten cuidado: valores incorrectos pueden impedir que el servidor arranque.",
+                    text_color="#9ca3af",
+                    wraplength=460,
+                    justify="left"
+                ).pack(anchor="w", padx=8, pady=(4, 8))
+
+                for key in other_keys:
+                    row = ctk.CTkFrame(adv_body, corner_radius=8)
+                    row.pack(fill="x", padx=8, pady=4)
+
+                    row.grid_columnconfigure(0, weight=0)
+                    row.grid_columnconfigure(1, weight=1)
+
+                    ctk.CTkLabel(row, text=key)\
+                        .grid(row=0, column=0, sticky="w", padx=8, pady=6)
+
+                    var = ctk.StringVar(value=server_props_dict.get(key, ""))
+                    entry = ctk.CTkEntry(row, textvariable=var)
+                    entry.grid(row=0, column=1, sticky="ew", padx=(0, 8), pady=6)
+
+                    advanced_vars[key] = var
+
+            rebuild_advanced_ui_ref = rebuild_advanced_ui
+            rebuild_advanced_ui()
+
+            props_built = True
+
+        # ---------- callback cuando se cambia de tab principal ----------
+        def on_main_tab_change():
+            current = tabview.get()
+            if current == "server.properties" and not props_built:
+                build_props_tab()
+
+        tabview.configure(command=on_main_tab_change)
+
+        # =====================================================
+        #                    GUARDAR TODO
+        # =====================================================
 
         def save():
+            # 1) Config del servidor
             new_cfg = ServerConfig(
                 id=cfg.id if cfg else str(uuid4()),
                 name=name.get(),
@@ -2586,10 +2976,66 @@ class EsparcraftLauncher(ctk.CTk):
                 self.servers[new_cfg.id] = ServerRuntime(new_cfg)
 
             self._save_servers()
+
+            # 2) Guardar server.properties preservando formato original
+            server_path = (new_cfg.path or "").strip()
+            if props_built and os.path.isdir(server_path):
+                # Actualizar diccionario con valores de la UI
+                updated_props = {}
+                
+                # Básicos
+                updated_props["motd"] = motd_var.get()
+                updated_props["server-port"] = server_port_var.get().strip()
+                updated_props["server-ip"] = server_ip_var.get().strip()
+                updated_props["max-players"] = max_players_var.get().strip()
+                updated_props["level-name"] = level_name_var.get().strip() or "world"
+                updated_props["spawn-protection"] = spawn_protection_var.get().strip()
+                updated_props["view-distance"] = view_distance_var.get().strip()
+                updated_props["simulation-distance"] = simulation_distance_var.get().strip()
+                
+                updated_props["online-mode"] = "true" if online_mode_var.get() else "false"
+                updated_props["white-list"] = "true" if whitelist_var.get() else "false"
+                updated_props["hardcore"] = "true" if hardcore_var.get() else "false"
+                updated_props["pvp"] = "true" if pvp_var.get() else "false"
+                updated_props["allow-flight"] = "true" if allow_flight_var.get() else "false"
+                
+                updated_props["difficulty"] = difficulty_var.get()
+                updated_props["gamemode"] = gamemode_var.get()
+                
+                # Avanzados
+                for key, var in advanced_vars.items():
+                    updated_props[key] = var.get()
+                
+                # Reconstruir archivo línea por línea preservando formato
+                output_lines = []
+                
+                for line_data in server_props_lines:
+                    if line_data["type"] in ("blank", "comment"):
+                        # Preservar exactamente
+                        output_lines.append(line_data["content"])
+                    elif line_data["type"] == "property":
+                        key = line_data["key"]
+                        if key in updated_props:
+                            # Actualizar valor manteniendo formato "key=value"
+                            output_lines.append(f"{key}={updated_props[key]}")
+                        else:
+                            # Mantener línea original
+                            output_lines.append(line_data["content"])
+                
+                props_file = os.path.join(server_path, "server.properties")
+                try:
+                    with open(props_file, "w", encoding="utf-8") as f:
+                        f.write("\n".join(output_lines) + "\n")
+                except Exception as e:
+                    messagebox.showerror(
+                        "Error",
+                        f"No se pudo guardar server.properties:\n{e}"
+                    )
+
             modal.destroy()
             self.show_dashboard()
 
-        ctk.CTkButton(frame, text="💾 Guardar", command=save).pack(pady=20)
+        ctk.CTkButton(frame, text="💾 Guardar", command=save).pack(pady=12)
 
 
 
