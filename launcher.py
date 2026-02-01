@@ -160,6 +160,7 @@ class ServerConfig:
     ram_max: int
     path: str
     auto_restart: bool = False
+    jvm_args: str = ""  # 👈 NUEVO CAMPO para argumentos JVM
 
 
 class ServerRuntime:
@@ -1386,15 +1387,25 @@ class EsparcraftLauncher(ctk.CTk):
         java = JAVA_EXE
         if not java:
             msg = "ERROR: Java no encontrado. Instala Java 17+ y vuelve a intentar."
-            server.log_queue.put(msg)  # ← Solo queue, NO logs.append
+            server.log_queue.put(msg)
             return
 
+        # Construimos el comando base
         cmd = [
             java,
             f"-Xms{cfg.ram_min}G",
             f"-Xmx{cfg.ram_max}G",
-            "-jar", jar_path, "nogui"
         ]
+
+        # 👇 AGREGAMOS LOS ARGUMENTOS JVM ADICIONALES 👇
+        if cfg.jvm_args.strip():  # Si hay argumentos
+            # Dividimos por espacios para convertirlos en una lista
+            extra_args = cfg.jvm_args.split()
+            cmd.extend(extra_args)
+
+        # Añadimos el .jar y el modo nogui
+        cmd.extend(["-jar", jar_path, "nogui"])
+
 
         def run():
             server.running = True
@@ -2588,6 +2599,19 @@ class EsparcraftLauncher(ctk.CTk):
             variable=auto_restart_var
         ).pack(anchor="w", pady=15)
 
+        ctk.CTkLabel(tab_config, text="Argumentos JVM adicionales").pack(anchor="w", pady=(15, 0))
+        ctk.CTkLabel(
+            tab_config, 
+            text="(Ej: -Djava.net.preferIPv4Stack=true -XX:+UseG1GC)",
+            font=ctk.CTkFont(size=11),
+            text_color="#9ca3af"
+        ).pack(anchor="w")
+
+        jvm_args = ctk.CTkEntry(tab_config)
+        jvm_args.pack(fill="x", pady=5)
+        if cfg:
+            jvm_args.insert(0, cfg.jvm_args)  # Carga los args si existen
+
         # =====================================================
         #    ESTADO PARA server.properties Y VARIABLES DE UI
         # =====================================================
@@ -2959,7 +2983,6 @@ class EsparcraftLauncher(ctk.CTk):
         # =====================================================
 
         def save():
-            # 1) Config del servidor
             new_cfg = ServerConfig(
                 id=cfg.id if cfg else str(uuid4()),
                 name=name.get(),
@@ -2967,7 +2990,8 @@ class EsparcraftLauncher(ctk.CTk):
                 path=path_var.get(),
                 ram_min=ram_min_val.get(),
                 ram_max=ram_max_val.get(),
-                auto_restart=auto_restart_var.get()
+                auto_restart=auto_restart_var.get(),
+                jvm_args=jvm_args.get()  # 👈 GUARDAMOS LOS ARGUMENTOS
             )
 
             if cfg and cfg.id in self.servers:
