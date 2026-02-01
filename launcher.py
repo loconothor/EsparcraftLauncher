@@ -39,6 +39,13 @@ def data_path(filename):
     os.makedirs(path, exist_ok=True)
     return os.path.join(path, filename)
 
+def format_uuid_pretty(u: str) -> str:
+    """Devuelve la UUID con guiones (8-4-4-4-12) si viene en formato 32 chars."""
+    u = (u or "").strip()
+    if len(u) == 32 and "-" not in u:
+        return f"{u[0:8]}-{u[8:12]}-{u[12:16]}-{u[16:20]}-{u[20:32]}"
+    return u
+
 def parse_java_major(version_line: str) -> Optional[int]:
     try:
         # java version "17.0.10"
@@ -395,6 +402,8 @@ class EsparcraftLauncher(ctk.CTk):
             return
         console.insert("end", line + "\n", tag)
 
+    
+
     # --- patrones globales (a nivel de clase) ---
     _JOIN_PATTERNS = [
         # Vanilla / Spigot / Paper: "PlayerName joined the game"
@@ -409,6 +418,15 @@ class EsparcraftLauncher(ctk.CTk):
         # Otros: "PlayerName has disconnected"
         re.compile(r"(?i)\b([A-Za-z0-9_]{3,16}) has disconnected\b"),
     ]
+    # --- limpiar códigos de color de Minecraft y escapes ANSI ---
+    _MC_COLOR_RE = re.compile(r"§.")          # elimina §a, §b, §x, §f, etc.
+    _ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")  # elimina secuencias tipo ESC[0m, ESC[31m...
+
+    def _clean_log_line(self, line: str) -> str:
+        """Elimina códigos de color (§a, §x§f...) y escapes ANSI de una línea de log."""
+        line = self._ANSI_ESCAPE_RE.sub("", line)
+        line = self._MC_COLOR_RE.sub("", line)
+        return line
 
     def _request_players_list(self, server: "ServerRuntime"):
         # Desactivado: ya no usamos "list", solo logs join/leave
@@ -536,7 +554,8 @@ class EsparcraftLauncher(ctk.CTk):
         offline.sort(key=str.lower)
         return offline
     def _uuid_for_player(self, server: ServerRuntime, name: str) -> str:
-        return server.usercache.get(name.lower(), "—")
+        raw = server.usercache.get(name.lower(), "")
+        return format_uuid_pretty(raw) if raw else "—"
 
     def _read_ops(self, server: ServerRuntime) -> list[dict]:
         """Lee ops.json. Devuelve lista de dicts: {name, uuid, level, bypassesPlayerLimit}"""
@@ -563,7 +582,30 @@ class EsparcraftLauncher(ctk.CTk):
             return []
 
         return []
+    def _read_bans(self, server: ServerRuntime) -> list[dict]:
+        """Lee banned-players.json. Devuelve lista de dicts: {name, uuid, reason, created, source}"""
+        bans_file = os.path.join(server.config.path, "banned-players.json")
+        if not os.path.exists(bans_file):
+            return []
 
+        try:
+            with open(bans_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                out = []
+                for it in data:
+                    out.append({
+                        "name": it.get("name", "Unknown"),
+                        "uuid": it.get("uuid", ""),
+                        "reason": it.get("reason", ""),
+                        "created": it.get("created", ""),
+                        "source": it.get("source", ""),
+                    })
+                return out
+        except Exception:
+            return []
+
+        return []
 
     
 
@@ -620,7 +662,9 @@ class EsparcraftLauncher(ctk.CTk):
         if self.servers:
             self.current_console = next(iter(self.servers))
 
+        # empezamos en el dashboard
         self.show_dashboard()
+
         self.after(100, self._tick_background)
         self._console_last_index = 0
 
@@ -656,9 +700,442 @@ class EsparcraftLauncher(ctk.CTk):
         self.content.grid_columnconfigure(0, weight=1)
         self.content.grid_rowconfigure(0, weight=1)
 
+    def _show_sidebar_players_panel(self, show: bool):
+        """Muestra u oculta el panel de jugadores de la barra lateral."""
+        st = getattr(self, "_sidebar_players_state", None)
+
+        if show:
+            # si aún no existe, lo creamos
+            if not st or not st.get("frame") or not st["frame"].winfo_exists():
+                self._init_sidebar_players_panel()
+                return
+            # si existe pero está oculto, lo volvemos a empaquetar
+            frame = st["frame"]
+            try:
+                frame.pack_info()
+            except Exception:
+                frame.pack(fill="both", expand=True, padx=15, pady=(10, 15))
+        else:
+            if st and st.get("frame") and st["frame"].winfo_exists():
+                st["frame"].pack_forget()
+
+    def _init_sidebar_players_panel(self):
+        """Crea el panel de jugadores en la parte baja de la barra lateral (solo para Consola)."""
+        # Si ya existía, lo eliminamos
+        st = getattr(self, "_sidebar_players_state", None)
+        if st:
+            old = st.get("frame")
+            if old and old.winfo_exists():
+                old.destroy()
+
+        panel = ctk.CTkFrame(self.sidebar, corner_radius=12)
+        panel.pack(fill="both", expand=True, padx=15, pady=(10, 15))
+        # fila 3 (lista) crece
+        panel.grid_rowconfigure(3, weight=1)
+        panel.grid_columnconfigure(0, weight=1)
+        panel.grid_columnconfigure(1, weight=1)
+
+        # ----- fila 0: título -----
+        title = ctk.CTkLabel(
+            panel,
+            text="Jugadores online",
+            font=ctk.CTkFont(size=14, weight="bold")
+        )
+        title.grid(row=0, column=0, columnspan=2,
+                   sticky="w", padx=8, pady=(6, 2))
+
+        # ----- servidores + filtro (MISMA FILA) -----
+        server_ids = list(self.servers.keys())
+        server_names = {sid: self.servers[sid].config.name for sid in server_ids}
+        default_sid = self.current_console or (server_ids[0] if server_ids else None)
+
+        server_var = ctk.StringVar(
+            value=server_names.get(default_sid, "Sin servidores")
+        )
+
+        def on_select_server(name):
+            for sid, sname in server_names.items():
+                if sname == name:
+                    self._sidebar_players_state["server_id"] = sid
+                    self._sidebar_players_render()
+                    break
+
+        server_menu = ctk.CTkOptionMenu(
+            panel,
+            values=list(server_names.values()) or ["Sin servidores"],
+            variable=server_var,
+            command=on_select_server
+        )
+        server_menu.grid(row=1, column=0,
+                         sticky="ew", padx=(8, 4), pady=(0, 4))
+
+        filter_var = ctk.StringVar(value="Todos")
+        filter_menu = ctk.CTkOptionMenu(
+            panel,
+            variable=filter_var,
+            # sin "Admins"
+            values=["Todos", "OPs", "Jugadores", "Baneados"],
+            command=lambda _=None: self._sidebar_players_render()
+        )
+        filter_menu.grid(row=1, column=1,
+                         sticky="ew", padx=(4, 8), pady=(0, 4))
+
+        # ----- búsqueda -----
+        search_var = ctk.StringVar(value="")
+        search_entry = ctk.CTkEntry(
+            panel,
+            textvariable=search_var,
+            placeholder_text="Buscar jugador..."
+        )
+        search_entry.grid(row=2, column=0, columnspan=2,
+                          sticky="ew", padx=8, pady=(0, 4))
+
+        # ----- lista -----
+        list_frame = ctk.CTkScrollableFrame(panel, corner_radius=8)
+        list_frame.grid(row=3, column=0, columnspan=2,
+                        sticky="nsew", padx=4, pady=(2, 2))
+
+        # ----- contador -----
+        counter_label = ctk.CTkLabel(
+            panel, text="0 online",
+            text_color="#9ca3af", anchor="w"
+        )
+        counter_label.grid(row=4, column=0, columnspan=2,
+                           sticky="w", padx=8, pady=(0, 6))
+
+        self._sidebar_players_state = {
+            "frame": panel,
+            "server_id": default_sid,
+            "server_menu": server_menu,
+            "server_var": server_var,
+            "search_var": search_var,
+            "filter_var": filter_var,
+            "list_frame": list_frame,
+            "counter_label": counter_label,
+            "cards": {},          # name -> frame
+            "_last_state": None,  # para saber si la lista cambió
+        }
+
+        def on_search(*_):
+            self._sidebar_players_render()
+        search_var.trace_add("write", on_search)
+
+        self._sidebar_players_render()
+        self.after(600, self._sidebar_players_loop)
+
+    def _sidebar_players_loop(self):
+        """Auto-refresh del panel de jugadores de la barra lateral."""
+        st = getattr(self, "_sidebar_players_state", None)
+        if not st:
+            return
+        frame = st.get("frame")
+        if not frame or not frame.winfo_exists():
+            return
+
+        # solo actualizar si la consola está visible
+        if not self.console_widget:
+            self.after(800, self._sidebar_players_loop)
+            return
+
+        self._sidebar_players_render()
+        self.after(800, self._sidebar_players_loop)
+
+    def _sidebar_players_render(self):
+        """Actualiza incrementalmente la lista de jugadores en el panel lateral."""
+        st = getattr(self, "_sidebar_players_state", None)
+        if not st:
+            return
+
+        server_id = st.get("server_id")
+        list_frame = st["list_frame"]
+        filter_mode = st["filter_var"].get()
+        q = st["search_var"].get().strip().lower()
+        counter_label = st["counter_label"]
+        cards = st["cards"]
+
+        # si no hay servidor válido
+        if not server_id or server_id not in self.servers:
+            for w in list(list_frame.winfo_children()):
+                w.destroy()
+            cards.clear()
+            counter_label.configure(text="0 online")
+            return
+
+        server = self.servers[server_id]
+        self._load_usercache(server)
+
+        ops = self._read_ops(server)
+        bans = self._read_bans(server)
+
+        op_set = {(o.get("name") or "").lower() for o in ops}
+
+        players: list[dict] = []
+
+        # ---- modo Baneados ----
+        if filter_mode == "Baneados":
+            for b in bans:
+                name = (b.get("name") or "").strip()
+                if not name:
+                    continue
+                if q and q not in name.lower():
+                    continue
+                players.append({
+                    "name": name,
+                    "role": "BANEADO",
+                    "uuid": format_uuid_pretty(b.get("uuid", "")) if b.get("uuid") else "—",
+                })
+        else:
+            # solo jugadores ONLINE
+            seen = set()
+            for name in server.players_online:
+                if not name or name in seen:
+                    continue
+                seen.add(name)
+                nl = name.lower()
+                is_op = nl in op_set
+
+                if filter_mode == "OPs" and not is_op:
+                    continue
+                if filter_mode == "Jugadores" and is_op:
+                    continue
+
+                uuid = self._uuid_for_player(server, name)
+                if q and (q not in nl) and (q not in uuid.lower()):
+                    continue
+
+                role = "OP" if is_op else "JUGADOR"
+
+                players.append({
+                    "name": name,
+                    "role": role,
+                    "uuid": uuid,
+                    "is_op": is_op,
+                })
+
+            # prioridad: OP -> JUGADOR
+            players.sort(key=lambda p: (0 if p.get("is_op") else 1,
+                                        p["name"].lower()))
+
+        # clave de estado para evitar trabajo si nada cambió
+        state_key = (
+            server_id,
+            filter_mode,
+            q,
+            tuple((p["name"], p["role"], p["uuid"]) for p in players)
+        )
+        if st["_last_state"] == state_key:
+            return
+        st["_last_state"] = state_key
+
+        valid_names = {p["name"] for p in players}
+
+        # eliminar tarjetas de jugadores que ya no aplican
+        for name in list(cards.keys()):
+            if name not in valid_names:
+                cards[name].destroy()
+                del cards[name]
+
+        # crear/actualizar tarjetas y reposicionar
+        for idx, p in enumerate(players):
+            name = p["name"]
+            if name not in cards:
+                cards[name] = self._sidebar_create_player_card(list_frame, server, p)
+            else:
+                self._sidebar_update_player_card(cards[name], server, p)
+
+            cards[name].grid(row=idx, column=0, sticky="ew", padx=4, pady=2)
+
+        # contador
+        if filter_mode == "Baneados":
+            counter_label.configure(text=f"{len(players)} baneados")
+        else:
+            counter_label.configure(text=f"{len(players)} online")
+
+    def _sidebar_create_player_card(self, parent, server: ServerRuntime, info: dict):
+        """Crea una tarjeta compacta para el panel lateral (nombre + rol + Kick/Ban/DeOP)."""
+        name = info["name"]
+        uuid = info["uuid"]
+        role = info["role"]
+
+        row = ctk.CTkFrame(parent, corner_radius=4)
+        row.grid_columnconfigure(0, weight=1)
+
+        left = ctk.CTkFrame(row, fg_color="transparent")
+        left.grid(row=0, column=0, sticky="w", padx=3, pady=1)
+
+        right = ctk.CTkFrame(row, fg_color="transparent")
+        right.grid(row=0, column=1, sticky="e", padx=3, pady=1)
+
+        # nombre
+        name_label = ctk.CTkLabel(
+            left, text=name,
+            font=ctk.CTkFont(size=10, weight="bold")
+        )
+        name_label.pack(anchor="w")
+
+        # tooltip simple: al pasar el ratón, mostrar (uuid)
+        def on_enter(event, lbl=name_label, n=name, u=uuid):
+            if u and u != "—":
+                lbl.configure(text=f"{n} ({u})")
+
+        def on_leave(event, lbl=name_label, n=name):
+            lbl.configure(text=n)
+
+        name_label.bind("<Enter>", on_enter)
+        name_label.bind("<Leave>", on_leave)
+
+        # badge rol
+        if role == "OP":
+            fg = "#f59e0b"
+        elif role == "BANEADO":
+            fg = "#6b7280"
+        else:
+            fg = "#4b5563"
+
+        role_label = ctk.CTkLabel(
+            left,
+            text=role,
+            text_color="white",
+            fg_color=fg,
+            corner_radius=6,
+            padx=4, pady=1,
+            font=ctk.CTkFont(size=8, weight="bold")
+        )
+        role_label.pack(anchor="w", pady=(1, 0))
+
+        def send_cmd(cmd: str):
+            if not server.running or not server.process:
+                return
+            try:
+                server.process.stdin.write(cmd + "\n")
+                server.process.stdin.flush()
+            except Exception:
+                pass
+
+        # botones más claros y pequeños
+        btn_font = ctk.CTkFont(size=9)
+        base_style = dict(width=26, height=18,
+                          fg_color="#6b7280",
+                          hover_color="#9ca3af",
+                          text_color="white",
+                          font=btn_font)
+
+        # Kick
+        kick_btn = ctk.CTkButton(
+            right, text="K",
+            command=lambda n=name: send_cmd(f"kick {n}"),
+            **base_style
+        )
+        kick_btn.pack(side="left", padx=(0, 2))
+
+        # Ban / Unban
+        if role == "BANEADO":
+            ban_text = "Unb"
+            ban_cmd = lambda n=name: send_cmd(f"pardon {n}")
+        else:
+            ban_text = "Ban"
+            ban_cmd = lambda n=name: send_cmd(f"ban {n}")
+
+        ban_btn = ctk.CTkButton(
+            right, text=ban_text,
+            command=ban_cmd,
+            width=30, height=18,
+            fg_color="#b91c1c", hover_color="#ef4444",
+            text_color="white",
+            font=btn_font
+        )
+        ban_btn.pack(side="left", padx=(0, 2))
+
+        # DeOP
+        deop_btn = ctk.CTkButton(
+            right, text="-OP",
+            command=lambda n=name: send_cmd(f"deop {n}"),
+            **base_style
+        )
+        deop_btn.pack(side="left")
+
+        # si está baneado, deshabilitar Kick y DeOP
+        if role == "BANEADO":
+            kick_btn.configure(state="disabled")
+            deop_btn.configure(state="disabled")
+
+        # guardar refs para actualizar luego
+        row._name_label = name_label
+        row._role_label = role_label
+        row._kick_btn = kick_btn
+        row._ban_btn = ban_btn
+        row._deop_btn = deop_btn
+
+        return row
+
+    def _sidebar_update_player_card(self, row, server: ServerRuntime, info: dict):
+        """Actualiza una tarjeta existente (rol, uuid, comandos)."""
+        name = info["name"]
+        uuid = info["uuid"]
+        role = info["role"]
+
+        row._name_label.configure(text=name)
+
+        # rehacer tooltip
+        for seq in ("<Enter>", "<Leave>"):
+            row._name_label.unbind(seq)
+
+        def on_enter(event, lbl=row._name_label, n=name, u=uuid):
+            if u and u != "—":
+                lbl.configure(text=f"{n} ({u})")
+
+        def on_leave(event, lbl=row._name_label, n=name):
+            lbl.configure(text=n)
+
+        row._name_label.bind("<Enter>", on_enter)
+        row._name_label.bind("<Leave>", on_leave)
+
+        # color rol
+        if role == "OP":
+            fg = "#f59e0b"
+        elif role == "BANEADO":
+            fg = "#6b7280"
+        else:
+            fg = "#4b5563"
+
+        row._role_label.configure(text=role, fg_color=fg)
+
+        def send_cmd(cmd: str):
+            if not server.running or not server.process:
+                return
+            try:
+                server.process.stdin.write(cmd + "\n")
+                server.process.stdin.flush()
+            except Exception:
+                pass
+
+        # Kick
+        row._kick_btn.configure(
+            command=lambda n=name: send_cmd(f"kick {n}"),
+            state=("normal" if role != "BANEADO" else "disabled")
+        )
+
+        # Ban / Unban
+        if role == "BANEADO":
+            row._ban_btn.configure(
+                text="Unb",
+                command=lambda n=name: send_cmd(f"pardon {n}")
+            )
+            row._deop_btn.configure(state="disabled")
+        else:
+            row._ban_btn.configure(
+                text="Ban",
+                command=lambda n=name: send_cmd(f"ban {n}")
+            )
+            row._deop_btn.configure(
+                command=lambda n=name: send_cmd(f"deop {n}"),
+                state="normal"
+            )
+
     # ===================== DASHBOARD =====================
     def show_dashboard(self):
         self._clear_content()
+        self._show_sidebar_players_panel(False)
 
         container = ctk.CTkScrollableFrame(self.content)
         container.pack(fill="both", expand=True, padx=30, pady=30)
@@ -815,15 +1292,9 @@ class EsparcraftLauncher(ctk.CTk):
         actions = ctk.CTkFrame(card, fg_color="transparent")
         actions.pack(expand=True, fill="x", padx=24)
 
-        ctk.CTkButton(
-            actions,
-            text="👥 Jugadores",
-            fg_color="#374151",
-            command=lambda s=server: self.open_players_manager(s)
-        ).pack(fill="x", pady=4)
-
         main_btn_color = "#2563eb"
 
+        # Botón principal (arriba): Iniciar / Detener
         if server.status == "offline":
             ctk.CTkButton(
                 actions,
@@ -837,8 +1308,17 @@ class EsparcraftLauncher(ctk.CTk):
                 text="⏹ Detener servidor",
                 fg_color="#dc2626",
                 hover_color="#b91c1c",
-                command=lambda s=server: self.stop_server(s)
+                # usamos stop_server_clean, que ya usas en la consola y marca flags
+                command=lambda s=server: self.stop_server_clean(s)
             ).pack(fill="x", pady=6)
+
+        # Ahora Jugadores va debajo del botón principal
+        ctk.CTkButton(
+            actions,
+            text="👥 Jugadores",
+            fg_color="#374151",
+            command=lambda s=server: self.open_players_manager(s)
+        ).pack(fill="x", pady=4)
 
         ctk.CTkButton(
             actions,
@@ -906,7 +1386,7 @@ class EsparcraftLauncher(ctk.CTk):
                 creationflags=CREATE_NO_WINDOW,
                 text=True,
                 bufsize=1,
-                encoding='utf-8',      # ← AGREGAR ESTO
+                encoding='cp1252',      # ← AGREGAR ESTO
                 errors='replace'       # ← AGREGAR ESTO (reemplaza chars inválidos)
             )
             p = psutil.Process(server.process.pid)
@@ -914,7 +1394,8 @@ class EsparcraftLauncher(ctk.CTk):
             server._ps_process = p
 
             for line in server.process.stdout:
-                line = line.rstrip()
+                line = line.rstrip("\r\n")
+                line = self._clean_log_line(line)   # ← limpiar códigos de color
                 server.log_queue.put(line)
 
                 if "Done" in line:
@@ -995,6 +1476,7 @@ class EsparcraftLauncher(ctk.CTk):
 
     def show_console(self):
         self._clear_content()
+        self._show_sidebar_players_panel(True)
 
         if not self.servers:
             ctk.CTkLabel(self.content, text="No hay servidores creados").pack(pady=40)
@@ -1335,6 +1817,7 @@ class EsparcraftLauncher(ctk.CTk):
 
     def show_players_manager(self):
         self._clear_content()
+        self._show_sidebar_players_panel(False)
 
         if not self.servers:
             ctk.CTkLabel(self.content, text="No hay servidores creados").pack(pady=40)
@@ -1352,14 +1835,20 @@ class EsparcraftLauncher(ctk.CTk):
 
         # ---------- HEADER ----------
         header = ctk.CTkFrame(root, corner_radius=16)
-        header.grid(row=0, column=0, sticky="ew", pady=(0, 14))
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 6))   # antes (0, 14)
         header.grid_columnconfigure(1, weight=1)
+
+        # ---------- TOOLBAR ----------
+        toolbar = ctk.CTkFrame(root, corner_radius=16)
+        toolbar.grid(row=1, column=0, sticky="ew", pady=(0, 0))  # antes (0, 14)
+        toolbar.grid_columnconfigure(1, weight=1)
+
 
         ctk.CTkLabel(
             header,
             text="Jugadores",
             font=ctk.CTkFont(size=24, weight="bold")
-        ).grid(row=0, column=0, padx=16, pady=(14, 4), sticky="w")
+        ).grid(row=0, column=0, padx=16, pady=(10, 0), sticky="w")  # antes (14, 4)
 
         # selector servidor
         server_ids = list(self.servers.keys())
@@ -1386,37 +1875,26 @@ class EsparcraftLauncher(ctk.CTk):
             text=f"Servidor: {server.config.name}  •  Modo: Live (logs)",
             text_color="#9ca3af"
         )
-        subtitle.grid(row=1, column=0, padx=16, pady=(0, 14), sticky="w")
+        subtitle.grid(row=1, column=0, padx=16, pady=(0, 4), sticky="w")  # antes (0, 14)
 
-        # acciones
-        actions = ctk.CTkFrame(header, fg_color="transparent")
-        actions.grid(row=1, column=1, padx=16, pady=(0, 14), sticky="e")
+        #         # acciones
+        # actions = ctk.CTkFrame(header, fg_color="transparent")
+        # actions.grid(row=1, column=1, padx=16, pady=(0, 14), sticky="e")
 
-        # ---------- TOOLBAR ----------
-        toolbar = ctk.CTkFrame(root, corner_radius=16)
-        toolbar.grid(row=1, column=0, sticky="ew", pady=(0, 14))
-        toolbar.grid_columnconfigure(1, weight=1)
 
         ctk.CTkLabel(toolbar, text="Buscar:", text_color="#cbd5e1")\
-            .grid(row=0, column=0, padx=(16, 8), pady=12, sticky="w")
+            .grid(row=0, column=0, padx=(16, 8), pady=(2, 4), sticky="w")  # antes 12
 
         search_var = ctk.StringVar(value="")
         search = ctk.CTkEntry(toolbar, textvariable=search_var, placeholder_text="Steve, Admin...")
-        search.grid(row=0, column=1, padx=(0, 12), pady=12, sticky="ew")
+        search.grid(row=0, column=1, padx=(0, 12), pady=(2, 4), sticky="ew")  # antes 12
 
         tab_var = ctk.StringVar(value="ONLINE")
         tab = ctk.CTkSegmentedButton(toolbar, values=["ONLINE", "OFFLINE", "OPS"], variable=tab_var)
-        tab.grid(row=0, column=2, padx=(0, 12), pady=12, sticky="e")
+        tab.grid(row=0, column=2, padx=(0, 12), pady=(2, 4), sticky="e")      # antes 12
 
         counter_label = ctk.CTkLabel(toolbar, text="", text_color="#9ca3af")
-        counter_label.grid(row=0, column=3, padx=(0, 16), pady=12, sticky="e")
-
-        # botón refrescar vista (no list)
-        def refresh_view():
-            self._players_render_current(root, server, search_var.get(), tab_var.get(), list_frame, counter_label)
-
-        ctk.CTkButton(actions, text="⟳ Refrescar vista", fg_color="#374151", command=refresh_view)\
-            .pack(side="left")
+        counter_label.grid(row=0, column=3, padx=(0, 16), pady=(2, 4), sticky="e")  # antes 12
 
         # ---------- LISTA ----------
         list_frame = ctk.CTkScrollableFrame(root, corner_radius=16)
@@ -1595,7 +2073,9 @@ class EsparcraftLauncher(ctk.CTk):
         left.grid(row=0, column=0, sticky="w", padx=10, pady=8)
 
         ctk.CTkLabel(left, text=name, font=name_font).pack(anchor="w")
-        ctk.CTkLabel(left, text=f"UUID: {uuid or '—'}", font=sub_font, text_color="#9ca3af").pack(anchor="w", pady=(2, 0))
+        pretty_uuid = format_uuid_pretty(uuid) if uuid else "—"
+        ctk.CTkLabel(left, text=f"UUID: {pretty_uuid}", font=sub_font, text_color="#9ca3af")\
+            .pack(anchor="w", pady=(2, 0))
 
         right = ctk.CTkFrame(row, fg_color="transparent")
         right.grid(row=0, column=1, sticky="e", padx=10, pady=8)
@@ -1693,6 +2173,8 @@ class EsparcraftLauncher(ctk.CTk):
 
     def show_plugins_manager(self):
         self._clear_content()
+        self._show_sidebar_players_panel(False)
+
         if not self.current_plugins or self.current_plugins not in self.servers:
             ctk.CTkLabel(self.content, text="Selecciona un servidor").pack(pady=40)
             return
